@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:taskly/models/task.dart';
 
 class HomePage extends StatefulWidget {
   HomePage();
@@ -10,20 +12,27 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  late double _deviceHeight, _deviceWidth;
+  late double deviceHeight, deviceWidth;
 
-  String? _newTaskContent;
+  String? newTaskContent;
+
+  Box? box;
 
   _HomePageState();
 
   @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    _deviceHeight = MediaQuery.of(context).size.height;
-    _deviceWidth = MediaQuery.of(context).size.height;
-    print("Imput Value: $_newTaskContent");
+    deviceHeight = MediaQuery.of(context).size.height;
+    deviceWidth = MediaQuery.of(context).size.height;
+    //print("Imput Value: $newTaskContent");
     return Scaffold(
       appBar: AppBar(
-        toolbarHeight: _deviceHeight * 0.15,
+        toolbarHeight: deviceHeight * 0.15,
         title: const Text(
           'Tarefa!',
           style: TextStyle(fontSize: 25, color: Colors.white),
@@ -31,28 +40,62 @@ class _HomePageState extends State<HomePage> {
         centerTitle: true,
         backgroundColor: Colors.red,
       ),
-      body: _tasksList(),
+      body: _taskView(),
       floatingActionButton: _addTaskButton(),
     );
   }
 
+  Widget _taskView() {
+    return FutureBuilder(
+      future: Hive.openBox('Tarefas'),
+      builder: (BuildContext context, AsyncSnapshot snapshot) {
+        if (snapshot.hasData) {
+          box = snapshot.data;
+          return _tasksList();
+        } else {
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        }
+      },
+    );
+  }
+
   Widget _tasksList() {
-    return ListView(
-      children: [
-        ListTile(
-          title: const Text(
-            'Engenharia',
-            style: TextStyle(decoration: TextDecoration.lineThrough),
+    List tasks = box!.values.toList();
+    return ListView.builder(
+      itemCount: tasks.length,
+      itemBuilder: (BuildContext context, int index) {
+        var task = Task.fromMap(tasks[index]);
+        return ListTile(
+          title: Text(
+            task.content,
+            style: TextStyle(
+                decoration: task.done ? TextDecoration.lineThrough : null),
           ),
           subtitle: Text(
-            DateTime.now().toString(),
+            task.timestamp.toString(),
           ),
-          trailing: const Icon(
-            Icons.check_box_outlined,
+          trailing: Icon(
+            task.done
+                ? Icons.check_box_outlined
+                : Icons.check_box_outline_blank_outlined,
             color: Colors.red,
           ),
-        ),
-      ],
+          onTap: () {
+            task.done = !task.done;
+            box!.putAt(
+              index,
+              task.toMap(),
+            );
+            setState(() {});
+          },
+          onLongPress: () {
+            box!.deleteAt(index);
+            setState(() {});
+          },
+        );
+      },
     );
   }
 
@@ -72,16 +115,26 @@ class _HomePageState extends State<HomePage> {
   void _displayTaskPopup() {
     showDialog(
       context: context,
-      builder: (BuildContext _context) {
+      builder: (BuildContext context) {
         return AlertDialog(
           title: const Text("Nova Tarefa"),
           content: TextField(
             onSubmitted: (value) {
-              // Lógica a ser executada quando o formulário for submetido
+              if (newTaskContent != null) {
+                var task = Task(
+                    content: newTaskContent!,
+                    timestamp: DateTime.now(),
+                    done: false);
+                box!.add(task.toMap());
+                setState(() {
+                  newTaskContent = null;
+                  Navigator.pop(context);
+                });
+              }
             },
             onChanged: (novoValor) {
               setState(() {
-                _newTaskContent = novoValor;
+                newTaskContent = novoValor;
               });
             },
           ),
